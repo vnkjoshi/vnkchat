@@ -1,0 +1,48 @@
+# CI configs
+.github/
+
+# Python bytecode
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Virtual environments
+venv/
+.venv/
+
+# Env files
++ .env         # ignore the real file
++ .env.local   # ignore any local overrides
++ !.env.example  # but track the template
+
+# Migrations cache
+migrations/__pycache__/
+migrations/*.py[cod]
+
+# Flask DB
+*.db
+
+# Logs & runtime data
+*.log
+logs/
+
+# Celery
+celerybeat-schedule
+
+# IDEs / editors
+.vscode/
+.idea/
+*.swp
+*.iml
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Build outputs
+build/
+dist/
+
+# Large or sensitive directories
+data/
+secrets/

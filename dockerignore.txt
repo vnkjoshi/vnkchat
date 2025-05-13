@@ -1,0 +1,22 @@
+# ─── Python artifacts ────────────────────────────────────────────
+__pycache__/
+*.py[cod]
+*$py.class
+
+# ─── Local env & IDE files ──────────────────────────────────────
+.env
+.idea/
+.vscode/
+venv/
+
+# ─── Docker & Compose files (dev-only) ─────────────────────────
+docker-compose.override.yml
+docker-compose.yml          # optional, keeps context small
+
+# ─── Git metadata ───────────────────────────────────────────────
+.git/
+.gitignore
+
+# ─── OS cruft ───────────────────────────────────────────────────
+.DS_Store
+Thumbs.db
