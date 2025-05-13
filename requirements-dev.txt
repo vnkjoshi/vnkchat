@@ -1,0 +1,5 @@
+# requirements-dev.txt
+-r requirements.txt
+pytest>=8.3.5
+pytest-flask>=1.2.0
+fakeredis
