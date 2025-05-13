@@ -1004,7 +1004,7 @@ def start_shoonya_websocket(user):
             # Tick updates → update DB, then emit full strategy state
             def subscribe_callback(msg):
                 on_data(user_obj, msg)
-                logger.info("✅ Tick message received for user %s: %s", user_obj.email, msg)
+                # logger.info("✅ Tick message received for user %s: %s", user_obj.email, msg)
                 state_key = get_strategy_state_key(user_obj.id)
                 raw = redis_client.get(state_key)
                 if raw:
