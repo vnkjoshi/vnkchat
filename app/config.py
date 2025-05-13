@@ -42,6 +42,13 @@ class BaseConfig:
     if ENV == 'production' and not os.getenv('REDIS_URL'):
         raise ConfigError("REDIS_URL is required in production")
 
+    # -----------------------
+    # Flask-Limiter storage backend
+    # -----------------------
+    # Default to in-memory (so tests/dev won’t hit Redis),
+    # override in Docker via env var.
+    RATELIMIT_STORAGE_URI = os.getenv('RATELIMIT_STORAGE_URI', 'memory://')
+
     CELERY_BROKER_URL     = os.getenv('CELERY_BROKER_URL',    'redis://localhost:6379/0')
     CELERY_RESULT_BACKEND = os.getenv('CELERY_RESULT_BACKEND','redis://localhost:6379/1')
 
