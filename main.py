@@ -903,7 +903,7 @@ def on_data(user, message):
       if the token from the message matches the token stored for that script.
     """
     # Extract token and live last traded price (LTP) from the message.
-    logger.info("on_data called with message: %s", message)
+    # logger.info("on_data called with message: %s", message)
     
     token = message.get("tk") or message.get("token")
     raw_ltp  = message.get("lp")   or message.get("ltp")

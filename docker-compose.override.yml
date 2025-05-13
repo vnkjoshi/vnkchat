@@ -39,7 +39,7 @@ services:
   celery_worker:
     build:
       context: .
-      target: builder
+      target: runtime
     user: app
     volumes:
       - .:/app
@@ -78,7 +78,7 @@ services:
   celery_beat:
     build:
       context: .
-      target: builder
+      target: runtime
     user: app
     volumes:
       - .:/app
