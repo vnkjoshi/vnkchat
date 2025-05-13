@@ -1,0 +1,91 @@
+{% extends "base.html" %}
+{% block title %}API Settings{% endblock %}
+{% block content %}
+<div class="container-fluid px-3">
+  <div class="row justify-content-center">
+    <div class="col-12 col-md-8 col-lg-6">
+      <div class="card shadow">
+        <div class="card-header bg-white text-dark py-3">
+          <h5 class="mb-0">API Credentials Settings</h5>
+        </div>
+        <div class="card-body">
+          <form method="POST" novalidate>
+            {{ csrf_field() }}
+            <div class="row g-3">
+              <!-- Shoonya User ID -->
+              <div class="col-12 col-sm-6">
+                <label for="shoonya_user_id" class="form-label">API User ID</label>
+                <input type="text"
+                       class="form-control"
+                       id="shoonya_user_id"
+                       name="shoonya_user_id"
+                       value="{{ credential.shoonya_user_id if credential else '' }}"
+                       placeholder="XY987654"
+                       required>
+              </div>
+              <!-- Shoonya Password -->
+              <div class="col-12 col-sm-6">
+                <label for="shoonya_password" class="form-label">API Password</label>
+                  <div class="input-group">
+                    <input type="password" class="form-control" id="shoonya_password" name="shoonya_password" placeholder="••••••••" autocomplete="new-password" required>
+                    <button class="btn btn-outline-secondary toggle-password" type="button" data-target="#shoonya_password">
+                      <i class="bi bi-eye"></i>
+                    </button>
+                  </div>
+              </div>
+              <!-- Vendor Code -->
+              <div class="col-12 col-sm-6">
+                <label for="shoonya_vendor_code" class="form-label">Vendor Code</label>
+                <input type="text"
+                       class="form-control"
+                       id="shoonya_vendor_code"
+                       name="shoonya_vendor_code"
+                       value="{{ credential.vendor_code if credential else '' }}"
+                       placeholder="XY987654_U"
+                       required>
+              </div>
+              <!-- Shoonya App Key -->
+              <div class="col-12 col-sm-6">
+                <label for="shoonya_app_key" class="form-label">App Key</label>
+                <input type="text"
+                       class="form-control"
+                       id="shoonya_app_key"
+                       name="shoonya_app_key"
+                       value="{{ credential.api_secret if credential else '' }}"
+                       placeholder="1a2b3c4d..."
+                       required>
+              </div>
+              <!-- IMEI -->
+              <div class="col-12 col-sm-6">
+                <label for="shoonya_imei" class="form-label">IMEI</label>
+                <input type="text"
+                       class="form-control"
+                       id="shoonya_imei"
+                       name="shoonya_imei"
+                       value="{{ credential.imei if credential else '' }}"
+                       placeholder="abc1234"
+                       required>
+              </div>
+              <!-- TOTP Secret -->
+              <div class="col-12 col-sm-6">
+                <label for="shoonya_totp_secret" class="form-label">TOTP Secret</label>
+                <input type="text"
+                       class="form-control"
+                       id="shoonya_totp_secret"
+                       name="shoonya_totp_secret"
+                       value="{{ credential.totp_secret if credential else '' }}"
+                       placeholder="QWERTYUIOP..."
+                       required>
+              </div>
+              <!-- Save Button -->
+              <div class="col-12">
+                <button type="submit" class="btn btn-primary w-100 py-2">Save Settings</button>
+              </div>
+            </div>
+          </form>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}

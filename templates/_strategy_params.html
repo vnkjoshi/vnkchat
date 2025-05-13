@@ -1,0 +1,98 @@
+    <!-- _strategy_params.html -->
+    <div class="form-group">
+        <label for="entry_basis">Entry Condition</label>
+        <div class="input-group">
+            <select id="entry_basis" name="entry_basis" class="form-control" required>
+            <option value="close">Close</option>
+            <option value="high">High</option>
+            <option value="low">Low</option>
+            <option value="open">Open</option>
+            </select>
+            <input type="number" id="entry_percentage" step="1" name="entry_percentage" class="form-control" placeholder="Percentage" required>
+        </div>
+    </div>
+  
+    <div class="form-group">
+        <label>Re-entry Conditions (Select any that apply)</label>
+
+        <!-- Option 1: Based on Previous Day Price -->
+        <div class="form-check">
+            <input class="form-check-input" type="checkbox" value="prev_day" id="reentry_prev_day_checkbox" name="reentry_prev_day_enabled">
+            <label class="form-check-label" for="reentry_prev_day_checkbox">Based on Previous Day Price</label>
+        </div>
+        <div class="input-group mb-2" id="reentry_prev_day_group" style="display:none;">
+            <select id="reentry_prev_day_basis" name="reentry_prev_day_basis" class="form-control">
+            <option value="close">Close</option>
+            <option value="high">High</option>
+            <option value="low">Low</option>
+            <option value="open">Open</option>
+            </select>
+            <input type="number" id="reentry_prev_day_percentage" step="1" name="reentry_prev_day_percentage" class="form-control" placeholder="Percentage">
+        </div>
+
+        <!-- Option 2: Based on Last Buy Price -->
+        <div class="form-check">
+            <input class="form-check-input" type="checkbox" value="last_buy" id="reentry_last_buy_checkbox" name="reentry_last_buy_enabled">
+            <label class="form-check-label" for="reentry_last_buy_checkbox">Based on Last Buy Price</label>
+        </div>
+        <div class="input-group mb-2" id="reentry_last_buy_group" style="display:none;">
+            <input type="number" id="reentry_last_buy_percentage" step="1" name="reentry_last_buy_percentage" class="form-control" placeholder="Percentage">
+        </div>
+
+        <!-- Option 3: Based on Weighted Average Price -->
+        <div class="form-check">
+            <input class="form-check-input" type="checkbox" value="weighted_avg" id="reentry_weighted_checkbox" name="reentry_weighted_enabled">
+            <label class="form-check-label" for="reentry_weighted_checkbox">Based on Weighted Average Price</label>
+        </div>
+        <div class="input-group mb-2" id="reentry_weighted_group" style="display:none;">
+            <input type="number" id="reentry_weighted_percentage" step="1" name="reentry_weighted_percentage" class="form-control" placeholder="Percentage">
+        </div>
+    </div>
+
+    <div class="form-group">
+        <label for="investment_type">Investment</label>
+        <div class="input-group">
+            <select id="investment_type" name="investment_type" class="form-control" required>
+            <option value="quantity">Quantity</option>
+            <option value="fixed">Fixed Amount</option>
+            </select>
+            <input type="number" id="investment_value" step="1" name="investment_value" class="form-control" placeholder="Value" required>
+        </div>
+    </div>
+  
+    <div class="form-group">
+        <label for="profit_target_type">Profit Target</label>
+        <div class="input-group">
+            <select id="profit_target_type" name="profit_target_type" class="form-control" required>
+            <option value="percentage">Percentage</option>
+            <option value="fixed">Fixed Amount</option>
+            </select>
+            <input type="number" id="profit_target_value" step="1" name="profit_target_value" class="form-control" placeholder="Value" required>
+        </div>
+    </div>
+  
+    <div class="form-group">
+        <label for="stop_loss_type">Stop Loss</label>
+        <div class="input-group">
+            <select id="stop_loss_type" name="stop_loss_type" class="form-control">
+            <option value="percentage">Percentage</option>
+            <option value="fixed">Fixed Amount</option>
+            </select>
+            <input type="number" id="stop_loss_value" step="1" name="stop_loss_value" class="form-control" placeholder="Value">
+        </div>
+    </div>
+  
+    <div class="form-group">
+        <label for="execution_time_type">Execution Time</label>
+        <div class="input-group">
+            <select id="execution_time_type" name="execution_time_type" class="form-control">
+            <option value="before">Before</option>
+            <option value="after">After</option>
+            </select>
+            <input type="time" id="execution_time_value" name="execution_time_value" class="form-control">
+        </div>
+        <small class="form-text text-muted">
+            Specify whether the order should execute before or after the chosen time.
+        </small>
+    </div>
+  
