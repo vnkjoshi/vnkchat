@@ -50,7 +50,6 @@ Project Folder Structure:
     - signup.html
     - strategy_details.html
   - tests
-    - ReadMe.txt
     - __init__.py
     - conftest.py
     - test_archival.py
