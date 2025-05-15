@@ -173,8 +173,7 @@ def place_order_task(self, user_id, script_id, decision, order_params):
                         script.script_name, available, required,
                         extra={"user_id": user_id, "script_id": script_id}
                     )
-                    # script.status = "Skipped"
-                    script.status = "Failed"
+                    script.status = "Skipped"
                     db.session.commit()
                     
                     # ─── Push updated balance to UI ───────────────────────────────
@@ -185,6 +184,19 @@ def place_order_task(self, user_id, script_id, decision, order_params):
                         namespace="/api",
                         room=user_id
                     )
+
+                    # ─── Notify front-end of skipped order ─────────────────
+                    socketio.emit(
+                        "order_skipped",
+                        {
+                            "symbol": script.script_name,
+                            "available": available,
+                            "required": required
+                        },
+                        namespace="/api",
+                        room=user_id
+                    )
+
                     return
                 # ───────────────────────────────────────────────────────────────────────
                 # 2) Step 3: attempt to place the order
@@ -444,7 +456,7 @@ def get_daily_price_series_task(self, user_id, tradingsymbol, from_date, to_date
 @celery.task(
     bind=True,
     autoretry_for=(ShoonyaAPIException,),
-    retry_kwargs={'max_retries': 6, 'countdown': 30},
+    retry_kwargs={'max_retries': 2, 'countdown': 30},
     retry_backoff=True,
     name="tasks.fetch_entry_threshold_task"
 )
@@ -486,9 +498,9 @@ def fetch_entry_threshold_task(self, user_id, script_id, entry_basis):
 
         try:
             # 1) Decide which Shoonya API to use
-            if self.request.retries < 6:
+            if self.request.retries < 2:
                 # attempts 1–6: try cache first, then fresh login if cache misses
-                api = get_cached_api_instance(user) or initialize_shoonya(user)
+                api = get_cached_api_instance(user)
                 logger.debug("Attempt #%d: using cached API for %s", self.request.retries + 1, user.email)
             else:
                 # attempt #7 (and beyond if we loop): force a fresh login

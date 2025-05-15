@@ -245,7 +245,7 @@ def evaluate_trading_cycle(users, now=None, skip_reentry=False, skip_market_hour
                         script.reentry_threshold = None
                         script.reentry_threshold_date = None
                     # Skip non-active scripts
-                    if script.status in ("Sold-out", "Paused", "Failed"):
+                    if script.status in ("Sold-out", "Paused", "Failed", "Skipped"):
                         continue
                     # Failure cooldown – pulled from config (fallback to order cooldown if not set)
                     ft = getattr(script, "failure_timestamp", None)
