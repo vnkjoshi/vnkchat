@@ -1,17 +1,19 @@
 from gevent import monkey
-monkey.patch_all()
+# monkey.patch_all()
 
 import os
 import time
+import logging
 from app import create_app
-from celery import Celery
+from celery import Celery, Task
 from celery.schedules import crontab
 import celery.signals as _signals
 from celery.signals import task_prerun, task_postrun, task_failure
 from prometheus_client import start_http_server
 from app.metrics import TASK_COUNTER, TASK_DURATION
-from flask import current_app
 from app.extensions import db
+
+logger = logging.getLogger(__name__)
 
 # Expose metrics on port 8000 (or any free port)
 app = create_app()
@@ -32,6 +34,20 @@ celery = Celery (
     include=['app.tasks']
 )
 
+# ─── wrap every task in Flask’s app context ─────────────────────────────
+class ContextTask(Task):
+    # prevent Celery from registering this as a real task
+    abstract = True
+
+    def __call__(self, *args, **kwargs):
+        # push Flask app context around the task execution
+        with app.app_context():
+            return super().__call__(*args, **kwargs)
+
+# tell Celery to use our ContextTask as the base for all tasks
+celery.Task = ContextTask
+# ─────────────────────────────────────────────────────────────────────────
+
 # Tell Celery whether to run tasks eagerly or not
 celery.conf.update(
     task_always_eager    = app.config.get('CELERY_TASK_ALWAYS_EAGER', False),
@@ -45,6 +61,9 @@ celery.conf.beat_schedule_filename = beat_schedule_file
 # Configure Celery time settings
 celery.conf.timezone    = app.config['CELERY_TIMEZONE']
 celery.conf.enable_utc  = app.config['CELERY_ENABLE_UTC']
+
+# ─── Celery 6+: ensure we retry broker connections on startup ───────────
+celery.conf.broker_connection_retry_on_startup = True
 
 # Hook into Celery signals
 @task_prerun.connect
@@ -79,7 +98,7 @@ def close_db_session_handler(sender=None, **kwargs):
         with app.app_context():
             db.session.remove()
     except Exception as e:
-        current_app.logger.exception("❌ Error closing DB session: %s", e)
+        logger.exception("❌ Error closing DB session: %s", e)
         
 # Dynamically hook into worker_shutdown if it exists in this Celery install
 _shutdown_signal = getattr(_signals, "worker_shutdown", None)

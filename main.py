@@ -6,7 +6,7 @@ if os.getenv("SKIP_LOAD_DOTENV") != "1":
     load_dotenv()
 
 from gevent import monkey
-monkey.patch_all()
+# monkey.patch_all()
 
 import sys, time, json, logging, redis, threading
 from datetime import datetime, date, timedelta
@@ -27,6 +27,8 @@ from sqlalchemy.orm import joinedload
 from cryptography.fernet import Fernet
 
 from app import create_app
+# ─── JSON logger: preserve emojis by disabling ASCII escaping ───────────
+from pythonjsonlogger import jsonlogger
 from app.extensions import socketio, db, bcrypt, migrate, login_manager
 from app.metrics import HTTP_REQUESTS, CELERY_QUEUE_LENGTH
 from app.models import (
@@ -41,7 +43,8 @@ from app.shoonya_integration import (
     search_script,
     api_daily_price_series,
     place_order,
-    get_previous_ohlc
+    get_previous_ohlc,
+    get_available_margin
 )
 
 from app.strategies import build_strategy_state
@@ -51,6 +54,18 @@ from flask_limiter.util import get_remote_address
 
 # create and configure the Flask app
 app = create_app()
+
+# Override Flask’s default StreamHandler to use a JSON formatter
+handler = logging.StreamHandler()
+handler.setFormatter(
+    jsonlogger.JsonFormatter(
+        fmt='%(asctime)s %(name)s %(levelname)s %(message)',  
+        json_ensure_ascii=False
+    )
+)
+# Replace the app.logger handlers
+app.logger.handlers = [handler]
+app.logger.setLevel(logging.INFO)
 
 # initialize any globals that depend on app.config
 FERNET_KEY = app.config['FERNET_KEY']
@@ -115,11 +130,16 @@ def get_cached_api_instance(user):
     now = time.time()
     redis_key = f"user:{user.id}:api_expiry"
 
-    # 1) Check Redis TTL
+    # 1) Check Redis TTL (but don’t crash if Redis is down)
     try:
-        redis_expiry = float(redis_client.get(redis_key) or 0)
-    except (TypeError, ValueError):
-        redis_expiry = 0
+        val = redis_client.get(redis_key)
+        redis_expiry = float(val or 0)
+    except (redis.exceptions.ConnectionError, redis.exceptions.TimeoutError) as e:
+        logger.warning(
+            "⚠️ Redis unavailable when fetching api_expiry for %s: %s",
+            user.email, e
+        )
+        redis_expiry = 0.0
 
     # 2) If TTL valid AND we have a local instance, reuse it
     if now < redis_expiry:
@@ -188,6 +208,7 @@ limiter = Limiter(
     # use the storage backend from config (memory:// by default)
     storage_uri=app.config['RATELIMIT_STORAGE_URI']
 )
+
 limiter.init_app(app)
 
 @app.route('/login', methods=['GET', 'POST'])
@@ -374,8 +395,9 @@ def dashboard():
     if request.method == 'POST':
         # 1) Gather form data
         app.logger.info("✅ Dashboard POST data: %s", request.form)
-        if len(current_user.strategies) >= 5:
-            flash("Maximum strategy sets reached.", "warning")
+        max_sets = current_app.config["MAX_STRATEGY_SETS"]
+        if len(current_user.strategies) >= max_sets:
+            flash(f"Maximum strategy sets reached ({max_sets}).", "warning")
             return redirect(url_for('dashboard'))
 
         name = request.form['strategy_name']
@@ -456,7 +478,7 @@ def dashboard():
         update_user_subscription(current_user)
 
         # now dispatch threshold fetch for each new script
-        from app.tasks import fetch_entry_threshold_task
+        from app.tasks import fetch_entry_threshold_task, evaluate_trading_conditions_task
 
         for script in new_set.scripts:
             fetch_entry_threshold_task.delay(
@@ -464,6 +486,9 @@ def dashboard():
                 script.id,
                 new_set.entry_basis
             )
+        
+        # trigger an immediate full-cycle evaluation so the UI reflects new strategies right away
+        evaluate_trading_conditions_task.delay()
 
         return redirect(url_for('dashboard'))
 
@@ -503,8 +528,18 @@ def dashboard():
         strategy.total_trades     = total_trades
         strategy.deployed_scripts     = deployed_scripts
 
-    return render_template('dashboard.html', strategies=current_user.strategies)
+    # ─── Fetch available cash/margin ────────────────────────────
+    api = get_cached_api_instance(current_user)
+    balance = None
+    if api:
+        balance = get_available_margin(api)
 
+    # ─── Render with balance included ───────────────────────────
+    return render_template(
+        'dashboard.html',
+        strategies=current_user.strategies,
+        balance=balance
+    )
 # ----------------------------
 # check if a strategy set is "empty" according to your criteria
 # ----------------------------
@@ -771,20 +806,20 @@ def log_strategy_state_periodically():
                 length = redis_client.llen('celery')
                 CELERY_QUEUE_LENGTH.labels(queue_name='default').set(length)
             except Exception as e:
-                current_app.logger.warning("Could not update queue length metric: %s", e)
+                logger.warning("Could not update queue length metric: %s", e)
 
             # 2) Then iterate users
             users = User.query.all()
             for user in users:
                 state_raw = redis_client.get(get_strategy_state_key(user.id))
                 if not state_raw:
-                    current_app.logger.warning("No strategy state for user %s", user.email)
+                    logger.warning("No strategy state for user %s", user.email)
                     continue
                 try:
                     state_data = json.loads(state_raw)
-                    current_app.logger.info("🟢 Complete strategy state for %s: %s", user.email, json.dumps(state_data))
+                    logger.info("🟢 Complete strategy state for %s: %s", user.email, json.dumps(state_data))
                 except Exception as e:
-                    current_app.logger.error("❌ Error decoding strategy state for %s: %s", user.email, e)
+                    logger.error("❌ Error decoding strategy state for %s: %s", user.email, e)
 
             socketio.sleep(60)
 
@@ -844,9 +879,10 @@ def add_script(strategy_id):
     except:
         flash("Error processing selected scripts.", "danger")
         return redirect(url_for('strategy_details', strategy_id=strategy_id))
-
-    if len(strategy_set.scripts) + len(selected) > 10:
-        flash("Adding these scripts would exceed the maximum limit of 10.", "warning")
+    
+    max_per_set = current_app.config["MAX_SCRIPTS_PER_SET"]
+    if len(strategy_set.scripts) + len(selected) > max_per_set:
+        flash(f"Adding these scripts would exceed the maximum limit of {max_per_set}.", "warning")
         return redirect(url_for('strategy_details', strategy_id=strategy_id))
 
     new_scripts = []
@@ -865,7 +901,7 @@ def add_script(strategy_id):
     update_user_subscription(current_user)
 
     # now dispatch threshold fetch for each new script
-    from app.tasks import fetch_entry_threshold_task
+    from app.tasks import fetch_entry_threshold_task, evaluate_trading_conditions_task
 
     for script in new_scripts:
         fetch_entry_threshold_task.delay(
@@ -873,6 +909,9 @@ def add_script(strategy_id):
             script.id,
             strategy_set.entry_basis
         )
+        
+        # trigger an immediate full-cycle evaluation so the UI reflects new strategies right away
+        evaluate_trading_conditions_task.delay()
 
     return redirect(url_for('strategy_details', strategy_id=strategy_id))
 # ----------------------------
