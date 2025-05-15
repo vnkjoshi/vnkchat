@@ -167,6 +167,14 @@ socket.on("strategy_update", function(updatedState) {
     });
 });
 
+socket.on("balance_update", function(data) {
+  // find and update the balance-display element
+  const el = document.getElementById("balance-display");
+  if (el) {
+      el.textContent = `₹${data.balance}`;
+  }
+});
+
 // Retry button handler
 $(document).on("click", ".btn-retry", function(e) {
     e.preventDefault();
