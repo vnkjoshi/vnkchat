@@ -12,6 +12,7 @@ from api_helper import ShoonyaApiPy  # Ensure you have the Shoonya API library i
 import logging
 from app.metrics import HTTP_REQUESTS, SHOONYA_API_ERRORS, API_CALL_LATENCY
 from .exceptions import ShoonyaAPIException
+from zoneinfo import ZoneInfo
 
 logger = logging.getLogger(__name__)
 
@@ -63,6 +64,28 @@ def initialize_shoonya(user, retries=6, delay=12):
 # ----------------------------
 # Route: search_script
 # ----------------------------
+def get_available_margin(api, product_type="C", segment="CM", exchange="NSE"):
+    """
+    Fetch the user’s available cash margin.
+    - product_type: 'C' for CNC (delivery), 'M' for MIS (intraday) etc.
+    - segment: 'CM' for equity cash, 'FO' for futures/options, etc.
+    """
+    # call the Shoonya API
+    limits = api.get_limits(
+        product_type=product_type,
+        segment=segment,
+        exchange=exchange
+    )
+    # ensure we got a successful response
+    if not limits or limits.get("stat") != "Ok":
+        logger.warning("⚠️ Could not fetch limits: %r", limits)
+        return 0.0
+    # the “cash” field holds available margin as a string
+    return float(limits.get("cash", 0) or 0)
+
+# ----------------------------
+# Route: search_script
+# ----------------------------
 def search_script(api, search_text, exchange="NSE"):
     """
     Wraps the Shoonya API call to search for trading instruments (scripts) by name on a given exchange.
@@ -102,10 +125,10 @@ def get_previous_ohlc(api, tradingsymbol, field, exchange="NSE"):
         shoonya_key = field_map[key]
 
         # Compute 10 days ago and end of yesterday (exclude today's partial data).
-        now = datetime.now()
-        from_date = int((now - timedelta(days=10)).timestamp())
+        now            = datetime.now(ZoneInfo("Asia/Kolkata"))
+        from_date      = int((now - timedelta(days=10)).timestamp())
         today_midnight = now.replace(hour=0, minute=0, second=0, microsecond=0)
-        end_date = int(today_midnight.timestamp()) - 1
+        end_date       = int(today_midnight.timestamp()) - 1
 
         # Fetch with unified wrapper
         series = api_daily_price_series(api, tradingsymbol, from_date, end_date, exchange=exchange)

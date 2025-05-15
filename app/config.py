@@ -67,7 +67,7 @@ class BaseConfig:
     CELERY_ENABLE_UTC = False
     
     # How long to block duplicate orders (seconds)
-    ORDER_COOLDOWN_SECONDS    = int(os.getenv("ORDER_COOLDOWN_SECONDS", 600))
+    ORDER_COOLDOWN_SECONDS    = int(os.getenv("ORDER_COOLDOWN_SECONDS", 60))
     # How long to skip a script after a failure (seconds)
     FAILURE_COOLDOWN_SECONDS = int(os.getenv("FAILURE_COOLDOWN_SECONDS", 60))
     EVAL_SCHEDULE_SECONDS    = float(os.getenv("EVAL_SCHEDULE_SECONDS", 30.0))
@@ -81,6 +81,13 @@ class BaseConfig:
         'enable_reentry': os.getenv('FLAG_REENTRY', 'true').lower() == 'true',
         'enable_healthz': os.getenv('FLAG_HEALTHZ', 'true').lower() == 'true',
     }
+
+    # -----------------------
+    # Centralize “Max Scripts per Set” Limit
+    # -----------------------
+    MAX_STRATEGY_SETS = int(os.getenv("MAX_STRATEGY_SETS", "5"))
+    MAX_SCRIPTS_PER_SET = int(os.getenv("MAX_SCRIPTS_PER_SET", "10"))
+
 
 class DevelopmentConfig(BaseConfig):
     DEBUG = True

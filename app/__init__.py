@@ -30,6 +30,9 @@ def create_app():
         template_folder=os.path.join(project_root, 'templates'),
         static_folder=os.path.join(project_root, 'static'),
     )
+    
+    # ⬇ prevent objects from being expired whenever you commit
+    app.config['SQLALCHEMY_EXPIRE_ON_COMMIT'] = False
 
     # ─── Load config (including SECRET_KEY & FLASK_ENV) ───────────────────
     env = os.getenv('FLASK_ENV', 'development').lower()

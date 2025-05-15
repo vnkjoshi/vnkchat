@@ -9,7 +9,6 @@ from sqlalchemy import func
 from app.shoonya_integration import get_previous_ohlc, ShoonyaAPIException
 from logic.trade_decision import decide_trade
 from app.exceptions import OrderPendingException
-# from app.utils.idempotency import acquire_order_lock
 
 # How many workers total, and which one this is (0-based)
 TOTAL_SHARDS   = int(os.environ.get("TOTAL_SHARDS",   "1"))
@@ -40,7 +39,7 @@ def evaluate_trade_decision(api, script, live_ltp, strategy, now, threshold_cach
             try:
                 thr = get_previous_ohlc(api, script.script_name, strategy.entry_basis)
             except Exception as e:
-                current_app.logger.warning(
+                logger.warning(
                     "Failed to fetch entry threshold for %s: %s",
                     script.script_name, e,
                     extra={"user_id": getattr(script, "user_id", None),
@@ -69,7 +68,7 @@ def evaluate_trade_decision(api, script, live_ltp, strategy, now, threshold_cach
                             api, script.script_name, prev_cfg["basis"]
                         )
                     except Exception as e:
-                        current_app.logger.warning(
+                        logger.warning(
                             "Failed to fetch re-entry threshold for %s: %s",
                             script.script_name, e,
                             extra={"user_id": getattr(script, "user_id", None),
@@ -252,13 +251,13 @@ def evaluate_trading_cycle(users, now=None, skip_reentry=False, skip_market_hour
                     ft = getattr(script, "failure_timestamp", None)
                     failure_cooldown = current_app.config.get(
                         "FAILURE_COOLDOWN_SECONDS",
-                        current_app.config.get("ORDER_COOLDOWN_SECONDS", 600)
+                        current_app.config.get("ORDER_COOLDOWN_SECONDS")
                     )
                     if ft and (now.timestamp() - float(ft)) < failure_cooldown:
                         continue
 
                     # General cooldown – pulled from config
-                    order_cooldown = current_app.config.get("ORDER_COOLDOWN_SECONDS", 600)
+                    order_cooldown = current_app.config.get("ORDER_COOLDOWN_SECONDS")
                     if script.last_order_time:
                         last_time = script.last_order_time
                         # drop tzinfo on both for a clean subtraction
@@ -282,8 +281,8 @@ def evaluate_trading_cycle(users, now=None, skip_reentry=False, skip_market_hour
                                         script.script_name,
                                         strat.entry_basis
                                     )
-                                except ShoonyaAPIException as e:
-                                    current_app.logger.warning(
+                                except Exception as e:
+                                    logger.warning(
                                         "Could not fetch entry threshold for %s: %s",
                                         script.script_name, str(e),
                                         extra={"user_id": user.id, "script_id": script.id}
@@ -325,7 +324,7 @@ def evaluate_trading_cycle(users, now=None, skip_reentry=False, skip_market_hour
                             if live_ltp > 0:
                                 qty = int(strat.investment_value / live_ltp)
                             else:
-                                current_app.logger.warning(
+                                logger.warning(
                                     "Invalid LTP for %s", script.script_name,
                                     extra={"user_id": user.id, "script_id": script.id}
                                 )
@@ -346,7 +345,7 @@ def evaluate_trading_cycle(users, now=None, skip_reentry=False, skip_market_hour
                             "amo": "NO",
                             "remarks": f"Auto {decision} based on {strat.entry_basis}"
                         }
-                        current_app.logger.info(
+                        logger.info(
                             "Enqueue %s for %s @ %s",
                             decision, script.script_name, live_ltp,
                             extra={"user_id": user.id, "script_id": script.id}
@@ -370,7 +369,7 @@ def evaluate_trading_cycle(users, now=None, skip_reentry=False, skip_market_hour
 
                     except OrderPendingException as e:
                         # Already pending: log + notify UI, then continue
-                        current_app.logger.warning(
+                        logger.warning(
                             "Order already pending for %s: %s",
                             script.script_name, str(e),
                             extra={"user_id": user.id, "script_id": script.id}
@@ -392,7 +391,7 @@ def evaluate_trading_cycle(users, now=None, skip_reentry=False, skip_market_hour
 
                     except Exception as e:
                         # Any other unexpected error: log + notify, then continue
-                        current_app.logger.error(
+                        logger.error(
                             "Unexpected error for %s: %s",
                             script.script_name, str(e),
                             extra={"user_id": user.id, "script_id": script.id}

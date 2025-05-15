@@ -5,6 +5,7 @@ and fetching previous day's price series.
 """
 import json
 import logging
+import redis
 from datetime import datetime, date, timedelta, time
 from zoneinfo import ZoneInfo
 from sqlalchemy.orm import joinedload
@@ -12,13 +13,14 @@ from celery_app import celery  # Import our configured Celery instance
 from celery.exceptions import MaxRetriesExceededError
 from flask import current_app
 from main import app, db, get_cached_api_instance, get_strategy_state_key, redis_client, socketio
-from .shoonya_integration import initialize_shoonya, place_order, get_quotes, api_daily_price_series, get_previous_ohlc
+from .shoonya_integration import initialize_shoonya, place_order, get_quotes, api_daily_price_series, get_previous_ohlc, get_available_margin
 from .models import User, StrategyScript, StrategyScriptArchive, StrategySet
-from celery import Task
 from celery.signals import worker_ready, task_failure
 from app.metrics import CELERY_TASK_FAILURES, TASK_COUNTER, TASK_DURATION
 from .strategies import evaluate_trading_cycle, build_strategy_state
 from app.exceptions import ShoonyaAPIException, PlaceOrderRetry, OrderPendingException
+from app.utils.idempotency import acquire_order_lock
+Task = celery.Task   # <-- this is your ContextTask
 
 # India market hours
 MARKET_TZ    = ZoneInfo("Asia/Kolkata")
@@ -59,18 +61,18 @@ def login_api_task(user_id):
         try:
             user = db.session.get(User, user_id)
             if not user:
-                current_app.logger.error("❌ User not found for user_id: %s", user_id)
+                logger.error("❌ User not found for user_id: %s", user_id)
                 return False
 
             api = get_cached_api_instance(user)
             if api:
-                current_app.logger.info("✅ API login successful for user %s", user.email)
+                logger.info("✅ API login successful for user %s", user.email)
                 return True
             else:
-                current_app.logger.error("❌ API login failed for user %s", user.email)
+                logger.error("❌ API login failed for user %s", user.email)
                 return False
         except Exception:
-            current_app.logger.exception("❌ Error in login_api_task for user %s", user_id)
+            logger.exception("❌ Error in login_api_task for user %s", user_id)
             raise
 # -------------------------------------------------
 # Mark scripts as Failed after retries
@@ -112,7 +114,6 @@ def place_order_task_body(user_id, script_id, decision, order_params, redis_cli)
     Raises OrderPendingException if a lock already exists.
     """
     # Idempotency guard: pass in redis_cli so tests and real code are uniform
-    from app.utils.idempotency import acquire_order_lock
     acquire_order_lock(user_id, script_id, redis_cli)
 
 # Then use this base task for place_order_task:
@@ -129,8 +130,6 @@ def place_order_task(self, user_id, script_id, decision, order_params):
     Places an order via Shoonya, waits for an Ok response,
     then fetches the tradebook fills and updates your DB.
     """
-    from app.utils.idempotency import acquire_order_lock
-
     lock_key = f"order_pending:{user_id}:{script_id}"
     try:
         # ── 1) Grab the lock ─────────────────────────────
@@ -154,6 +153,40 @@ def place_order_task(self, user_id, script_id, decision, order_params):
                 if not api:
                     raise PlaceOrderRetry("API login failed")
                 
+                # ─── Pre-flight margin check ───────────────────────────────────────────
+                # Fetch available cash margin via Shoonya's get_limits()
+                available = get_available_margin(api)
+                
+                # Figure out how much we're about to spend
+                script = db.session.get(StrategyScript, script_id)
+                qty = order_params.get("quantity", 0)
+                if order_params.get("price_type") == "MKT":
+                    # Market orders use your entry_threshold as proxy for LTP
+                    required = float(script.entry_threshold or 0) * qty
+                else:
+                    # Limit orders' price is in paise (10000 = ₹100)
+                    required = (float(order_params.get("price", 0)) / 100) * qty
+
+                if available < required:
+                    logger.warning(
+                        "🛑 Skipping order for %s: insufficient margin (have %.2f, need %.2f)",
+                        script.script_name, available, required,
+                        extra={"user_id": user_id, "script_id": script_id}
+                    )
+                    # script.status = "Skipped"
+                    script.status = "Failed"
+                    db.session.commit()
+                    
+                    # ─── Push updated balance to UI ───────────────────────────────
+                    new_balance = get_available_margin(api)
+                    socketio.emit(
+                        "balance_update",
+                        {"balance": new_balance},
+                        namespace="/api",
+                        room=user_id
+                    )
+                    return
+                # ───────────────────────────────────────────────────────────────────────
                 # 2) Step 3: attempt to place the order
                 result = place_order(api, **order_params)
                 logger.info("✅ place_order response for %s: %r", script.script_name, result)
@@ -310,6 +343,15 @@ def place_order_task(self, user_id, script_id, decision, order_params):
 
                 db.session.commit()
 
+                # ─── Push updated balance to UI ───────────────────────────────
+                new_balance = get_available_margin(api)
+                socketio.emit(
+                    "balance_update",
+                    {"balance": new_balance},
+                    namespace="/api",
+                    room=user_id
+                )
+
                 # 11) Broadcast updated strategy state
                 # refreshed = User.query.get(user_id)
                 refreshed = db.session.get(User, user_id)
@@ -336,14 +378,14 @@ def place_order_task(self, user_id, script_id, decision, order_params):
             }, room=str(user_id))
         pass
     except ShoonyaAPIException as e:
-        current_app.logger.error(
+        logger.error(
             "❌ Shoonya API error in place_order_task (user=%s, script=%s): %s",
             user_id, script_id, e
         )
         # you can optionally mark script Failed here
     except Exception:
         # any other bug: log & bubble up so Celery alerts you
-        current_app.logger.exception(
+        logger.exception(
             "❌ Unexpected error in place_order_task (user=%s, script=%s)",
             user_id, script_id
         )
@@ -352,39 +394,11 @@ def place_order_task(self, user_id, script_id, decision, order_params):
             # 🔓 Remove the pending-order lock
             try:
                 redis_client.delete(lock_key)
-            except Exception as e:
+            except redis.RedisError as e:
                 logger.warning(
                     "⚠️ Could not clear order lock %s: %s", lock_key, e,
                     extra={"user_id": user_id, "script_id": script_id}
                 )
-
-@celery.task(
-    bind=True,
-    autoretry_for=(ShoonyaAPIException,),
-    retry_kwargs={'max_retries': 2, 'countdown': 10},
-    retry_backoff=True,
-    name="tasks.get_quotes_task"
-)
-def get_quotes_task(self, user_id, token):
-    with app.app_context():
-        # user = User.query.get(user_id)
-        user = db.session.get(User, user_id)
-        if not user:
-            logger.error("❌ User not found for user_id: %s", user_id, extra={"user_id": user_id})
-            return {"error": "User not found"}
-        api = get_cached_api_instance(user)
-        if not api:
-            # network / credential issue → retry
-            raise ShoonyaAPIException("get_quotes: Shoonya login failed")
-        result = get_quotes(api, token)
-        if not result or result.get("stat") != "Ok":
-            logger.warning("⚠️ get_quotes error for %s; retrying", user.email, extra={"user_id": user_id})
-            # force re-auth and retry
-            api = initialize_shoonya(user)
-            result = get_quotes(api, token)
-            if not result or result.get("stat") != "Ok":
-                raise ShoonyaAPIException(f"get_quotes: invalid response {result}")
-        return result
 
 @celery.task(
     bind=True,
@@ -446,10 +460,18 @@ def fetch_entry_threshold_task(self, user_id, script_id, entry_basis):
         user = db.session.get(User, user_id)
         # script = StrategyScript.query.get(script_id)
         script = db.session.get(StrategyScript, script_id)
-        if not user or not script:
-            # nothing to do
-            return
         
+        if not user or not script:
+            return
+
+        # ── skip redundant fetch if we already have today’s threshold ──
+        # if script.entry_threshold_date == date.today():
+        #     logger.info(
+        #         "🛑 already fetched threshold for %s on %s – skipping",
+        #         script.script_name, script.entry_threshold_date
+        #     )
+        #     return script.entry_threshold
+
         # ── Idempotency guard: skip if already fetching this threshold ──
         lock_key = f"threshold_fetch_pending:{user_id}:{script_id}"
         locked = redis_client.set(
@@ -513,7 +535,6 @@ def fetch_entry_threshold_task(self, user_id, script_id, entry_basis):
             self.request.retries = 0
             # schedule next cycle in 30 seconds (you can adjust)
             raise self.retry(countdown=30)
-
 # ---------------------------
 # Nightly archive task
 # ---------------------------
@@ -536,7 +557,7 @@ def archive_old_scripts_task():
                     script_name     = s.script_name,
                     data            = {
                         "entry_threshold":     s.entry_threshold,
-                        "weighted_avg_price":    s.weighted_avg_price,
+                        "weighted_avg_price":  s.weighted_avg_price,
                         "cumulative_qty":      s.cumulative_qty,
                         "trade_count":         s.trade_count,
                         "last_trade_date":     s.last_trade_date.isoformat()
@@ -546,15 +567,16 @@ def archive_old_scripts_task():
                 db.session.delete(s)
             db.session.commit()
         except Exception:
-            current_app.logger.exception("❌ Error in archive_old_scripts_task")
+            logger.exception("❌ Error in archive_old_scripts_task")
             raise
 
 # Wrap the evaluate_trading_conditions function in a Celery task.
 @celery.task(name="app.tasks.evaluate_trading_conditions_task")
 def evaluate_trading_conditions_task():
     # 1) Measure task duration (optional)
-    with TASK_DURATION.labels(task_name='evaluate_trading_conditions_task').time():
-        with app.app_context():
+    with app.app_context():
+        logger.info("▶ Starting evaluate_trading_conditions_task")
+        with TASK_DURATION.labels(task_name='evaluate_trading_conditions_task').time():
             try:
                 # 2) Eager-load users → credentials → strategies → scripts
                 users = (
@@ -575,7 +597,7 @@ def evaluate_trading_conditions_task():
                 # Persist any threshold (and reset) updates
                 db.session.commit()
             except ShoonyaAPIException as e:
-                current_app.logger.error(
+                logger.error(
                     "ShoonyaAPIException in task: %s", str(e),
                     extra={"error_type": "ShoonyaAPIException"}
                 )
@@ -585,8 +607,12 @@ def evaluate_trading_conditions_task():
                     namespace="/api"
                 )
             except Exception as e:
-                current_app.logger.exception(
-                    "Unexpected error in evaluate_trading_conditions_task: %s", str(e),
+                # re‐raise any OrderPendingException so Celery can retry or fail visibly
+                if isinstance(e, OrderPendingException):
+                    raise
+                # everything else is indeed unexpected
+                logger.exception(
+                    "❌ Unhandled exception in evaluate_trading_conditions_task",
                     extra={"error": str(e)}
                 )
                 socketio.emit(
@@ -595,3 +621,4 @@ def evaluate_trading_conditions_task():
                     namespace="/api"
                 )
                 raise
+        logger.info("✅ Completed evaluate_trading_conditions_task")
