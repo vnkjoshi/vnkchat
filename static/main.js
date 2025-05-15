@@ -139,7 +139,7 @@ socket.on("strategy_update", function(updatedState) {
         const cls = data.status === "Running"   ? "bg-success"
                 : data.status === "Waiting"   ? "bg-secondary"
                 : data.status === "Paused"    ? "bg-warning text-dark"
-                : data.status === "Failed"    ? "bg-danger"
+                : data.status === "Failed" || data.status === "Skipped"   ? "bg-danger"
                 : data.status === "Sold-out"  ? "bg-info text-dark"
                 : "";
         badge.className = "badge " + cls;
@@ -148,7 +148,7 @@ socket.on("strategy_update", function(updatedState) {
         // now handle the Retry button
         const scriptId    = row.dataset.scriptId;
         const actionsCell = row.querySelector("td:last-child");
-        if (data.status === "Failed") {
+        if (data.status === "Failed" || data.status === "Skipped") {
           // only add one
           if (actionsCell && !actionsCell.querySelector(".btn-retry")) {
             const btn = document.createElement("button");
@@ -173,6 +173,11 @@ socket.on("balance_update", function(data) {
   if (el) {
       el.textContent = `₹${data.balance}`;
   }
+});
+
+socket.on("order_skipped", function(data) {
+  const msg = `Skipping order for ${data.symbol}: insufficient margin (have ${data.available.toFixed(2)}, need ${data.required.toFixed(2)})`;
+  showToast("Order Skipped", msg, "warning");
 });
 
 // Retry button handler
