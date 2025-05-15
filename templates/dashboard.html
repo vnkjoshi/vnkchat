@@ -5,7 +5,14 @@
   <!-- Page Title -->
   <section>
     <div class="d-flex justify-content-between align-items-center mb-4">
-      <h4 class="mb-0">Dashboard</h4>
+      <div>
+        <h4 class="mb-0">Dashboard</h4>
+          {% if balance is not none %}
+          <small class="text-muted">
+            Available Cash: <strong id="balance-display">₹{{ balance }}</strong>
+          </small>
+          {% endif %}
+      </div>
       
       <button type="button" class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#newStrategyModal">
         + Create New Strategy
