@@ -228,6 +228,8 @@
             <td class="status-field" id="status-field-{{ script.script_name }}">
               {% if script.status == 'Failed' %}
                 <span class="badge bg-danger">Failed</span>
+              {% elif script.status == 'Skipped' %}
+                <span class="badge bg-danger">Skipped</span>
               {% elif script.status == 'Running' %}
                 <span class="badge bg-success">Running</span>
               {% elif script.status == 'Paused' %}
@@ -270,7 +272,7 @@
                     <i class="bi bi-trash-fill"></i>
                 </button>
               </form>
-              {% if script.status == 'Failed' %}
+              {% if script.status in ['Failed','Skipped'] %}
                 <!-- Retry button: -->
                 <button class="btn btn-sm btn-outline-primary btn-retry me-1" data-script-id="{{ script.id }}" data-script-name="{{ script.script_name }}" title="Retry this script">Retry</button>
               {% endif %}
