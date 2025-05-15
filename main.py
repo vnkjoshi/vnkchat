@@ -306,7 +306,7 @@ def toggle_strategy_status(strategy_id):
 
     # Update each script in the strategy, ignoring scripts which are Sold-out or Failed.
     for script in strategy.scripts:
-        if script.status not in ["Sold-out", "Failed"]:
+        if script.status not in ["Sold-out", "Failed", "Skipped"]:
             script.status = new_status
     try:
         db.session.commit()
@@ -366,7 +366,7 @@ def aggregate_strategy_status(strategy):
     if not statuses:
         return "No Scripts"
     # If any script is Failed, that's the aggregate status.
-    if any(status == "failed" for status in statuses):
+    if any(status in ("failed","skipped") for status in statuses):
         return "Failed"
     # If any script is Running, then overall status is Running.
     if any(status == "running" for status in statuses):
@@ -577,7 +577,7 @@ def remove_strategy_set_from_cache(user, strategy_set):
 def retry_script(script_id):
     # script = StrategyScript.query.get_or_404(script_id)
     script = db.session.get(StrategyScript, script_id) or abort(404)
-    if script.status != "Failed" or script.strategy_set.user_id != current_user.id:
+    if script.status not in ("Failed","Skipped") or script.strategy_set.user_id != current_user.id:
         return jsonify(ok=False, error="Cannot retry"), 400
 
     # restore status
@@ -651,7 +651,7 @@ def strategy_details(strategy_id):
                 flash("Script not found.", "danger")
             else:
                 if action == 'delete':
-                    if script.status in ['Waiting', 'Sold-out', 'Running', 'Failed']:
+                    if script.status in ['Waiting', 'Sold-out', 'Running', 'Failed', 'Skipped']:
                         db.session.delete(script)
                         flash("Script deleted.", "info")
                     else:
