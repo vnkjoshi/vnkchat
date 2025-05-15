@@ -1,0 +1,354 @@
+{% extends "base.html" %}
+{% block title %}Dashboard{% endblock %}
+{% block content %}
+  
+  <!-- Page Title -->
+  <section>
+    <div class="d-flex justify-content-between align-items-center mb-4">
+      <div>
+        <h4 class="mb-0">Dashboard</h4>
+          {% if balance is not none %}
+          <small class="text-muted">
+            Available Cash: <strong id="balance-display">₹{{ balance }}</strong>
+          </small>
+          {% endif %}
+      </div>
+      
+      <button type="button" class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#newStrategyModal">
+        + Create New Strategy
+      </button>
+    </div>
+  </section>
+  <!-- Modal for creating new strategy set -->
+  <div class="modal fade" id="newStrategyModal" tabindex="-1" aria-labelledby="newStrategyModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered modal-lg">
+      <form method="POST" action="{{ url_for('dashboard') }}">
+        {{ csrf_field() }}
+        <div class="modal-content border-success">
+          <!-- Header -->
+          <div class="modal-header bg-white text-dark py-2">
+            <h5 class="modal-title" id="newStrategyModalLabel">Create New Strategy Set</h5>
+            <button type="button" class="btn-close btn-close-dark" data-bs-dismiss="modal" aria-label="Close"></button>
+          </div>
+          <!-- Body -->
+          <div class="modal-body">
+            <div class="container-fluid">
+              <div class="row g-3">
+                <!-- Strategy Name -->
+                <div class="col-12 col-md-6">
+                  <label for="strategy_name" class="form-label">Strategy Set Name</label>
+                  <input type="text" id="strategy_name" name="strategy_name" class="form-control" placeholder="e.g. Morning Momentum" required>
+                </div>
+
+                <!-- Script Search -->
+                <div class="col-12 col-md-6">
+                  <label for="scriptSearch" class="form-label">Search Script</label>
+                    <div class="position-relative">
+                      <input type="text" id="scriptSearch" class="form-control" placeholder="Enter script name">
+                      <!-- loader: hidden by default -->
+                      <div id="searchLoader"
+                      class="spinner-border spinner-border-sm position-absolute top-50 end-0 translate-middle-y me-3"
+                      style="display:none"
+                      role="status">
+                        <span class="visually-hidden">Loading…</span>
+                      </div>
+                    </div>
+                  <div id="searchResults" class="list-group mt-2"></div>
+                </div>
+
+                <!-- Selected Scripts -->
+                <div class="col-12">
+                  <label class="form-label">Selected Scripts (max 10)</label>
+                  <div id="selectedScripts" class="d-flex flex-wrap gap-2 border rounded p-2" style="min-height:60px;"></div>
+                  <input type="hidden" name="selected_scripts" id="selected_scripts">
+                </div>
+
+                <!-- Entry Condition -->
+                <div class="col-12 col-md-6">
+                  <label class="form-label">Entry Condition</label>
+                  <div class="input-group">
+                    <select id="entry_basis" name="entry_basis" class="form-select" required>
+                      <option value="close">Close</option>
+                      <option value="high">High</option>
+                      <option value="low">Low</option>
+                      <option value="open">Open</option>
+                    </select>
+                    <input type="number" id="entry_percentage" name="entry_percentage" class="form-control" placeholder="%" required>
+                  </div>
+                </div>
+
+                <!-- Re-entry Conditions (Accordion) -->
+                <div class="col-12 col-md-6">
+                  <div class="form-group">
+                    <label class="form-label">Re-entry Conditions (Select any that apply)</label>
+                    <!-- 1) Based on Previous Day Price -->
+                    <div class="form-check">
+                        <input class="form-check-input" type="checkbox" value="prev_day" id="reentry_prev_day_checkbox" name="reentry_prev_day_enabled">
+                        <label class="form-check-label" for="reentry_prev_day_checkbox">Based on Previous Day Price</label>
+                    </div>
+                    <div class="input-group mb-2" id="reentry_prev_day_group" style="display:none;">
+                        <select id="reentry_prev_day_basis" name="reentry_prev_day_basis" class="form-select">
+                          <option value="close">Close</option>
+                          <option value="high">High</option>
+                          <option value="low">Low</option>
+                          <option value="open">Open</option>
+                        </select>
+                        <input type="number" id="reentry_prev_day_percentage" step="1" name="reentry_prev_day_percentage" class="form-control" placeholder="%">
+                    </div>
+                     <!-- 2) Based on Last Buy Price -->
+                    <div class="form-check">
+                        <input class="form-check-input" type="checkbox" value="last_buy" id="reentry_last_buy_checkbox" name="reentry_last_buy_enabled">
+                        <label class="form-check-label" for="reentry_last_buy_checkbox">Based on Last Buy Price</label>
+                    </div>
+                    <div class="input-group mb-2" id="reentry_last_buy_group" style="display:none;">
+                        <input type="number" id="reentry_last_buy_percentage" step="1" name="reentry_last_buy_percentage" class="form-control" placeholder="%">
+                    </div>
+                    <!-- 3) Based on Weighted Average Price -->
+                    <div class="form-check">
+                        <input class="form-check-input" type="checkbox" value="weighted_avg" id="reentry_weighted_checkbox" name="reentry_weighted_enabled">
+                        <label class="form-check-label" for="reentry_weighted_checkbox">Based on Weighted Average Price</label>
+                    </div>
+                    <div class="input-group mb-2" id="reentry_weighted_group" style="display:none;">
+                        <input type="number" id="reentry_weighted_percentage" step="1" name="reentry_weighted_percentage" class="form-control" placeholder="%">
+                    </div>
+                  </div>
+                </div>
+
+                <!-- Investment -->
+                <div class="col-12 col-md-6">
+                  <label class="form-label">Investment</label>
+                  <div class="input-group">
+                    <select id="investment_type" name="investment_type" class="form-select" required>
+                      <option value="quantity">Quantity</option>
+                      <option value="fixed">Fixed Amount</option>
+                    </select>
+                    <input type="number" id="investment_value" name="investment_value" class="form-control" placeholder="Value" required>
+                  </div>
+                </div>
+
+                <!-- Profit Target -->
+                <div class="col-12 col-md-6">
+                  <label class="form-label">Profit Target</label>
+                  <div class="input-group">
+                    <select id="profit_target_type" name="profit_target_type" class="form-select" required>
+                      <option value="percentage">Percentage</option>
+                      <option value="fixed">Fixed Amount</option>
+                    </select>
+                    <input type="number" id="profit_target_value" name="profit_target_value" class="form-control" placeholder="Value" required>
+                  </div>
+                </div>
+
+                <!-- Stop Loss -->
+                <div class="col-12 col-md-6">
+                  <label class="form-label">Stop Loss</label>
+                  <div class="input-group">
+                    <select id="stop_loss_type" name="stop_loss_type" class="form-select">
+                      <option value="percentage">Percentage</option>
+                      <option value="fixed">Fixed Amount</option>
+                    </select>
+                    <input type="number" id="stop_loss_value" name="stop_loss_value" class="form-control" placeholder="Value">
+                  </div>
+                </div>
+
+                <!-- Execution Time -->
+                <div class="col-12 col-md-6">
+                  <label class="form-label">Execution Time</label>
+                  <div class="input-group">
+                    <select id="execution_time_type" name="execution_time_type" class="form-select">
+                      <option value="before">Before</option>
+                      <option value="after">After</option>
+                    </select>
+                    <input type="time" id="execution_time_value" name="execution_time_value" class="form-control">
+                  </div>
+                  <small class="form-text text-muted">Specify whether execution is before or after the chosen time.</small>
+                </div>
+              </div>
+            </div>
+          </div>
+          <!-- Footer -->
+          <div class="modal-footer">
+            <button type="submit" class="btn btn-primary">Deploy Strategy Live</button>
+            <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancel</button>
+          </div>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Display user's existing strategy sets -->
+  <section>
+    <div class="card">
+      <div class="card-header d-flex justify-content-between align-items-center bg-white">
+        <h5 class="my-1">Deployed Strategies</h5>
+      </div>
+      <div class="card-body p-2">
+        <table class="table table-hover m-0">
+          <thead>
+            <tr>
+              <th class="fw-normal">Set Name</th>
+              <th class="fw-normal">Created Date</th>
+              <th class="fw-normal">Deployed Scripts</th>
+              <th class="fw-normal">Total Investment</th>
+              <th class="fw-normal">Current Value</th>
+              <th class="fw-normal">P&L %</th>
+              <th class="fw-normal">Total Trades</th>
+              <th class="fw-normal">Status</th>
+              <th class="fw-normal">Actions</th>
+            </tr>
+          </thead>
+          <tbody class="align-middle">
+            {% for strat in strategies %}
+            <tr>
+              <td><a href="{{ url_for('strategy_details', strategy_id=strat.id) }}">{{ strat.name }}</a></td>
+              <td>{{ strat.created_date.strftime("%d-%m-%Y") }}</td>
+              <td>{{ strat.deployed_scripts }}</td>
+              <td>{{ strat.total_investment }}</td>
+              <td>{{ strat.current_value }}</td>
+              <td>{{ strat.pnl_percent }}%</td>
+              <td>{{ strat.total_trades }}</td>
+              <!-- <td>{{ strat.agg_status }}</td> -->
+              <td>
+                {% if strat.agg_status == 'Failed' %}
+                  <span class="badge bg-danger">Failed</span>
+                {% elif strat.agg_status == 'Running' %}
+                  <span class="badge bg-success">Running</span>
+                {% elif strat.agg_status == 'Paused' %}
+                  <span class="badge bg-warning text-dark">Paused</span>
+                {% elif strat.agg_status == 'Waiting' %}
+                  <span class="badge bg-secondary">Waiting</span>
+                {% elif strat.agg_status == 'Sold-out' %}
+                  <span class="badge bg-info text-dark">Sold-out</span>
+                {% else %}
+                  <span class="badge bg-light text-dark">{{ strat.agg_status }}</span>
+                {% endif %}
+              </td>
+              <td>
+                <!-- Action buttons: View Details and Toggle Pause/Resume -->
+                <!-- <a href="{{ url_for('strategy_details', strategy_id=strat.id) }}" class="btn btn-info btn-sm">View Details</a> -->
+                <form method="POST" action="{{ url_for('toggle_strategy_status', strategy_id=strat.id) }}" style="display:inline;">
+                  {{ csrf_field() }}
+                  {% if strat.agg_status.lower() == "paused" %}
+                    <button type="submit" class="btn btn-outline-success btn-sm" data-bs-toggle="tooltip" data-bs-placement="top" title="Resume Strategy"><i class="bi bi-play-fill"></i></button>
+                  {% else %}
+                    <button type="submit" class="btn btn-outline-warning btn-sm" data-bs-toggle="tooltip" data-bs-placement="top" title="Pause Strategy"><i class="bi bi-pause-fill"></i></button>
+                  {% endif %}
+                </form>
+              </td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </section>
+
+  {% endblock %}
+
+  {% block scripts %}
+  <script>
+    // (${script.cname}) Use if needed for Full Script name beside this ${script.tsym} below
+    $(function(){
+      let selectedScripts = [];
+      let debounceTimer;
+
+      function updateSelectedScriptsDisplay(){
+        let html = "";
+        selectedScripts.forEach((script, idx) => {
+          html += `
+            <div class="selected-script d-flex justify-content-between align-items-center border rounded py-1 px-2 bg-light" data-index="${idx}">
+              ${script.tsym}
+              <button type="button" class="btn btn-outline-danger btn-sm remove-script ms-1"><i class="bi bi-x-circle-fill"></i></button>
+            </div>`;
+        });
+        $("#selectedScripts").html(html);
+        $("#selected_scripts").val(JSON.stringify(selectedScripts));
+      }
+
+      // Debounced search
+      $("#scriptSearch").on("input", function(){
+        clearTimeout(debounceTimer);
+        const q = $(this).val().trim();
+        if (q.length < 3) {
+          $("#searchResults").empty();
+          return;
+        }
+        debounceTimer = setTimeout(() => {
+          $.ajax({
+            url: "/search_script_api",
+            method: "GET",
+            dataType: "json",
+            data: { search_text: q, exchange: "NSE" },
+            beforeSend: function() {
+              // clear previous results & show spinner
+              $("#searchResults").empty();
+              $("#searchLoader").show();
+            },
+          })
+          .done(data => {
+            $("#searchLoader").hide();
+            let resultsHtml = "";
+
+            // 1) API‐side error?
+            if (data.error) {
+              resultsHtml = `<div class="alert alert-danger mb-0">Error: ${data.error}</div>`;
+
+            // 2) No matches?
+            } else if (!data.values || data.values.length === 0) {
+              resultsHtml = "<div class='alert alert-warning mb-0'>No scripts found.</div>";
+
+            // 3) Render valid matches
+            } else {
+              data.values.forEach(item => {
+                resultsHtml += `
+                  <p class="search-result" style="cursor:pointer;"
+                    data-tsym="${item.tsym}"
+                    data-cname="${item.cname}"
+                    data-token="${item.token}">
+                    ${item.tsym} (${item.cname})
+                  </p>`;
+              });
+            }
+
+            $("#searchResults").html(resultsHtml);
+          })
+          .fail((xhr, status, err) => {
+            $("#searchLoader").hide();
+            // network / HTTP‐level failure
+            let msg = "Unexpected server error";
+            if (xhr.responseJSON?.error) {
+              msg = "Error: " + xhr.responseJSON.error;
+            }
+            $("#searchResults").html(
+              `<div class="alert alert-danger mb-0">${msg}</div>`
+            );
+          });
+        }, 300);  // debounce delay
+      });
+
+      // Select a script
+      $(document).on("click", ".search-result", function(){
+        const tsym  = $(this).data("tsym"),
+              cname = $(this).data("cname"),
+              token = $(this).data("token");
+        if (selectedScripts.some(s => s.tsym === tsym)) {
+          return alert("Script already selected.");
+        }
+        if (selectedScripts.length >= 10) {
+          return alert("Maximum of 10 scripts can be selected.");
+        }
+        selectedScripts.push({ tsym, cname, token });
+        updateSelectedScriptsDisplay();
+        $("#searchResults").empty();
+        $("#scriptSearch").val("");
+      });
+
+      // Remove a selected script
+      $(document).on("click", ".remove-script", function(){
+        const idx = $(this).closest(".selected-script").data("index");
+        selectedScripts.splice(idx, 1);
+        updateSelectedScriptsDisplay();
+      });
+    });
+  </script>    
+  {% endblock %}
+  

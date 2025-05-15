@@ -1,0 +1,155 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>{% block title %}Swing Algo Trading{% endblock %}</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="csrf-token" content="{{ csrf_token() }}">
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.0.2/dist/css/bootstrap.min.css" rel="stylesheet" integrity="sha384-EVSTQN3/azprG1Anm3QDgpJLIm9Nao0Yz1ztcQTwFspd3yD65VohhpuuCOmLASjC" crossorigin="anonymous">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.5/font/bootstrap-icons.css">
+
+  <style> 
+    .selector-for-some-widget {
+      box-sizing: content-box;
+    }
+  </style>
+  {% block head %}{% endblock %}
+</head>
+{# define it here, before your blocks #}
+{% macro csrf_field() -%}
+  <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+{%- endmacro %}
+<body>
+  <!-- Header -->
+  <nav class="navbar navbar-expand-lg navbar-light bg-light border-bottom mb-4">
+    <div class="container">
+      <!-- Brand / Logo -->
+      <a class="navbar-brand d-flex align-items-center" href="{{ url_for('dashboard') }}">
+        <!-- <img src="{{ url_for('static', filename='logo.png') }}" alt="Logo" width="32" height="32" class="me-2"> -->
+        <span class="fs-4">Swing Algo</span>
+      </a>
+
+      <!-- Mobile toggle -->
+      <button class="navbar-toggler" type="button"
+              data-bs-toggle="collapse"
+              data-bs-target="#navbarMain"
+              aria-controls="navbarMain"
+              aria-expanded="false"
+              aria-label="Toggle navigation">
+        <span class="navbar-toggler-icon"></span>
+      </button>
+
+      <!-- Nav links -->
+      <div class="collapse navbar-collapse" id="navbarMain">
+        <ul class="navbar-nav me-auto mb-2 mb-lg-0">
+          {% if current_user.is_authenticated %}
+            <li class="nav-item">
+              <a class="nav-link {% if request.endpoint=='dashboard' %}active{% endif %}"
+                href="{{ url_for('dashboard') }}">
+                Dashboard
+              </a>
+            </li>
+            <li class="nav-item">
+              <a class="nav-link"
+                href="{{ url_for('backtest') }}">
+                Backtest
+              </a>
+            </li>
+            <li class="nav-item">
+              <a class="nav-link"
+                href="{{ url_for('settings') }}">
+                API Settings
+              </a>
+            </li>
+          {% endif %}
+        </ul>
+
+        <!-- Right-side user/auth buttons -->
+        <ul class="navbar-nav ms-auto mb-2 mb-lg-0">
+          {% if not current_user.is_authenticated %}
+            <li class="nav-item me-2">
+              <a class="btn btn-outline-primary" href="{{ url_for('signup') }}">Signup</a>
+            </li>
+            <li class="nav-item">
+              <a class="btn btn-primary" href="{{ url_for('login') }}">Login</a>
+            </li>
+          {% else %}
+            <li class="nav-item dropdown">
+              <a class="nav-link dropdown-toggle" href="#" id="userMenu" role="button"
+                data-bs-toggle="dropdown" aria-expanded="false">
+                {{ current_user.username }}
+              </a>
+              <ul class="dropdown-menu dropdown-menu-end" aria-labelledby="userMenu">
+                {% if current_user.is_admin %}
+                  <li>
+                    <a class="dropdown-item"
+                      href="{{ url_for('admin_dashboard') }}">
+                      Admin Dashboard
+                    </a>
+                  </li>
+                  <li><hr class="dropdown-divider"></li>
+                {% endif %}
+                <li>
+                  <a class="dropdown-item" href="{{ url_for('logout') }}">
+                    Logout
+                  </a>
+                </li>
+              </ul>
+            </li>
+          {% endif %}
+        </ul>
+      </div>
+    </div>
+  </nav>
+  
+  <div class="container">
+    <!-- Toasts container (always present for JS to target) -->
+    <section>
+      <div id="toast-container" class="position-fixed top-0 end-0 p-3" style="z-index:1100;"></div>
+      <!-- Inject the user ID as a global JavaScript variable -->
+      <script>var userId = "{{ current_user.id if current_user.is_authenticated else '' }}";</script>
+    </section>
+
+    <!-- Flash messages area -->
+    <section>
+      {% with messages = get_flashed_messages(with_categories=true) %}
+        {% if messages %}
+          {% for category, message in messages %}
+            <!-- Toasts container -->
+            <div class="alert alert-{{ category }}">{{ message }}</div>
+          {% endfor %}
+        {% endif %}
+      {% endwith %}
+    </section>
+    <!-- Notification area -->
+    <section>
+      <div id="notification-area"></div>
+    </section>
+
+    {% block content %}{% endblock %}
+  </div>
+  <footer class="footer mt-4 py-3 bg-light text-center">
+    <div class="container">
+      <span class="text-muted">&copy; 2025 Swing Algo Trading</span>
+    </div>
+  </footer>
+    <!-- Bootstrap JS and dependencies -->
+    <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+    <!-- then your CSRF setup -->
+    <script>
+      $.ajaxSetup({
+        headers: {
+          'X-CSRFToken': $('meta[name="csrf-token"]').attr('content')
+        }
+      });
+    </script>
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.0.2/dist/js/bootstrap.bundle.min.js" integrity="sha384-MrcW6ZMFYlzcLA8Nl+NtUVF0sA7MsXsP1UyJoMp4YLEuNSfAP+JcXn/tWtIaxVXM" crossorigin="anonymous"></script>
+    
+    <!-- Include Socket.IO JS library and your custom script -->
+    <!-- <script src="https://cdn.socket.io/4.3.2/socket.io.min.js"></script> -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.5.4/socket.io.js"></script>
+    <script src="{{ url_for('static', filename='main.js') }}"></script>
+  {% block scripts %}
+  {% endblock %}
+</body>
+</html>
